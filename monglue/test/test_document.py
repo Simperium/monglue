@@ -3,6 +3,7 @@ import unittest
 import pymongo
 
 from monglue.test.test_mongo import PyMongoStub
+from monglue.test.test_mongo import PyMongoIntegrationTest
 from monglue.document import Document
 from monglue.document import Bind
 from monglue.document import required
@@ -33,6 +34,11 @@ class UserStrict(User):
 class DoumentTest(unittest.TestCase):
     def _get_database(self):
         db = PyMongoStub()['foo']
+        return Bind(db, User, UserStrict)
+
+    def _get_real_database(self):
+        dbname = PyMongoIntegrationTest.__dbname__
+        db = pymongo.Connection()[dbname]
         return Bind(db, User, UserStrict)
 
     def test_new(self):
@@ -149,3 +155,17 @@ class DoumentTest(unittest.TestCase):
                 'key': [('last_name', -1), ('first_name', 1)],
                 'sparse': True,
                 'v': 1})
+
+    def test_embedded_document(self):
+        db = self._get_real_database()
+        u = db.User.new({
+            'first_name': 'Bob',
+            'last_name': 'Loblaw',
+            'address' : { 'street' : '123', 'city' : 'Town'} })
+
+        u = db.User.find_one({'first_name':'Bob'})
+        self.assertTrue(isinstance(u, User))
+        self.assertFalse(isinstance(u.a['address'], User))
+        self.assertEqual(
+                type(u.a['address']),
+                dict)

@@ -41,6 +41,9 @@ class Document(object):
         return klass(document)
 
     def __setitem__(self, key, value):
+        # pymongo.find as_class applies recursively to documents embedded in result
+        if type(value) is type(self):
+            value = value.a
         self.a[key] = value
 
     def __new__(klass, *a, **kw):
