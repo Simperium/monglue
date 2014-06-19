@@ -1,6 +1,7 @@
 import unittest
 
 import pymongo
+import uuid
 
 from monglue.test.test_mongo import PyMongoStub
 from monglue.test.test_mongo import PyMongoIntegrationTest
@@ -31,14 +32,14 @@ class UserStrict(User):
     ]
 
 
-class DoumentTest(unittest.TestCase):
+class DocumentTest(unittest.TestCase):
     def _get_database(self):
         db = PyMongoStub()['foo']
         return Bind(db, User, UserStrict)
 
     def _get_real_database(self):
         dbname = PyMongoIntegrationTest.__dbname__
-        db = pymongo.Connection()[dbname]
+        db = pymongo.Connection()[dbname][str(uuid.uuid4())]
         return Bind(db, User, UserStrict)
 
     def test_new(self):
@@ -161,11 +162,45 @@ class DoumentTest(unittest.TestCase):
         u = db.User.new({
             'first_name': 'Bob',
             'last_name': 'Loblaw',
-            'address' : { 'street' : '123', 'city' : 'Town'} })
+            'address' : {
+                'street' : '123',
+                'city' : 'Towns',
+                'code' : {
+                    'blah' : 1
+                }
+            }
+        })
 
         u = db.User.find_one({'first_name':'Bob'})
         self.assertTrue(isinstance(u, User))
         self.assertFalse(isinstance(u.a['address'], User))
         self.assertEqual(
                 type(u.a['address']),
+                dict)
+        self.assertEqual(
+                type(u.a['address']['code']),
+                dict)
+
+    def test_embedded_document_in_list(self):
+        db = self._get_real_database()
+        u = db.User.new({
+            'first_name': 'Bob',
+            'last_name': 'Loblaw',
+            'addresses' : [
+                { 'street' : 123, 'city' : 'Towns' },
+                { 'street' : 246, 'city' : 'SF', 'code' : { 'blah' : 1 } }
+            ]
+        })
+
+        u = db.User.find_one({'first_name':'Bob'})
+        self.assertTrue(isinstance(u, User))
+        self.assertFalse(isinstance(u.a['addresses'], User))
+        self.assertEqual(
+                type(u.a['addresses']),
+                list)
+        self.assertEqual(
+                type(u.a['addresses'][0]),
+                dict)
+        self.assertEqual(
+                type(u.a['addresses'][1]['code']),
                 dict)

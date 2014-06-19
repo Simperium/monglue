@@ -29,6 +29,16 @@ def _validate(klass, document):
             if not validators[key](document, key):
                 raise ValidationError('Validation failed for: %s' % key)
 
+def _strip_class(value):
+    if isinstance(value, Document):
+        return _strip_class(value.a)
+    if type(value) is dict:
+        for k, v in value.items():
+            value[k] = _strip_class(v)
+    elif type(value) is list:
+        for i in range(len(value)):
+            value[i] = _strip_class(value[i])
+    return value
 
 class Document(object):
     @classmethod
@@ -42,9 +52,7 @@ class Document(object):
 
     def __setitem__(self, key, value):
         # pymongo.find as_class applies recursively to documents embedded in result
-        if type(value) is type(self):
-            value = value.a
-        self.a[key] = value
+        self.a[key] = _strip_class(value)
 
     def __new__(klass, *a, **kw):
         indexes = getattr(klass, '__collection_indexes__', None)
