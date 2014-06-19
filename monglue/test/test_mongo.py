@@ -33,12 +33,32 @@ class PyMongoBaseTest(object):
 
     def test_update_inc(self):
         c = self.get_collection()
-        row = {'foo': 'bar', 'abc': 123}
+        row = {'foo': 'bar'}
         _id = c.insert(row)
-        c.update({'_id': _id}, {'$inc': {'abc': 2}})
 
+        c.update({'_id': _id}, {'$inc': {'abc': 2}})
         got = list(c.find())
-        self.assertEqual(got, [{'_id': _id, 'foo': 'bar', 'abc': 125}])
+        self.assertEqual(got, [{'_id': _id, 'foo': 'bar', 'abc': 2}])
+
+        c.update({'_id': _id}, {'$inc': {'abc': 3}})
+        got = list(c.find())
+        self.assertEqual(got, [{'_id': _id, 'foo': 'bar', 'abc': 5}])
+
+    def test_update_addToSet(self):
+        c = self.get_collection()
+        row = {'foo': 'bar'}
+        _id = c.insert(row)
+
+        c.update({'_id': _id}, {'$addToSet': {'myset': 2}})
+        got = list(c.find())
+        self.assertEqual(got, [{'_id': _id, 'foo': 'bar', 'myset': [2]}])
+
+        c.update({'_id': _id}, {'$addToSet': {'myset': 'foo'}})
+        got = list(c.find())
+
+        c.update({'_id': _id}, {'$addToSet': {'myset': 2}})
+        got = list(c.find())
+        self.assertEqual(got, [{'_id': _id, 'foo': 'bar', 'myset': [2, 'foo']}])
 
     def test_find(self):
         c = self.get_collection()
@@ -190,6 +210,39 @@ class PyMongoBaseTest(object):
         got.sort()
         self.assertEqual([x['name'] for x in got], ['c'])
 
+    def test_drop(self):
+        c = self.get_collection()
+        c.insert({'name': 'a', 'age': 23})
+        c.insert({'name': 'b', 'age': 23})
+        c.insert({'name': 'c', 'age': 26})
+        c.drop()
+        got = list(c.find())
+        got.sort()
+        self.assertEqual([x['name'] for x in got], [])
+
+    def test_indexes(self):
+        c = self.get_collection()
+        self.assertEqual(c.index_information(), {})
+
+        name = c.ensure_index(
+            [('name', pymongo.ASCENDING), ('age', pymongo.DESCENDING)])
+        self.assertEqual(name, 'name_1_age_-1')
+        want = {
+            '_id_': {'key': [('_id', 1)], 'v': 1},
+            'name_1_age_-1': {'key': [('name', 1), ('age', -1)], 'v': 1},}
+        got = c.index_information()
+        self.assertEqual(got, want)
+
+        # stub should ensure unique-ness on write
+        name = c.ensure_index(
+            [('name', pymongo.ASCENDING), ('status', pymongo.DESCENDING)],
+            unique=True)
+        self.assertEqual(name, 'name_1_status_-1')
+        want['name_1_status_-1'] = {
+            'unique': True, 'key': [('name', 1), ('status', -1)], 'v': 1}
+        got = c.index_information()
+        self.assertEqual(got, want)
+
 
 class PyMongoIntegrationTest(unittest.TestCase, PyMongoBaseTest):
     """
@@ -215,6 +268,7 @@ class PyMongoIntegrationTest(unittest.TestCase, PyMongoBaseTest):
 class PyMongoCollectionStub(object):
     def __init__(self):
         self.__documents__ = []
+        self.__indexes__ = {}
 
     def insert(self, document):
         document['_id'] = bson.objectid.ObjectId()
@@ -254,6 +308,21 @@ class PyMongoCollectionStub(object):
             x for x in self.__documents__
                 if not self._match_spec(spec_or_object_id, x)]
 
+    def drop(self):
+        self.__documents__ = []
+
+    def index_information(self):
+        return self.__indexes__
+
+    def ensure_index(self, key, **kw):
+        name = ''
+        name = '_'.join(['%s_%s' % item for item in key])
+        if not self.__indexes__:
+            self.__indexes__['_id_'] = {'key': [('_id', 1)], 'v': 1}
+        self.__indexes__[name] = {'key': key, 'v': 1}
+        self.__indexes__[name].update(kw)
+        return name
+
     def _match_spec(self, spec, row):
         def equals(source, target):
             if isinstance(target, re._pattern_type):
@@ -286,7 +355,15 @@ class PyMongoCollectionStub(object):
 
     def _inc(self, document, row):
         for key in document:
+            if key not in row:
+                row[key] = 0
             row[key] += document[key]
+
+    def _addToSet(self, document, row):
+        for key in document:
+            if key not in row:
+                row[key] = []
+            row[key] = list(set(row[key]) | set([document[key]]))
 
     def _update(self, document, row):
         for key in document:
@@ -294,6 +371,8 @@ class PyMongoCollectionStub(object):
                 self._set(document[key], row)
             if key == '$inc':
                 self._inc(document[key], row)
+            if key == '$addToSet':
+                self._addToSet(document[key], row)
 
     def update(self, spec, document):
         possible = [x for x in self.__documents__ if self._match_spec(spec, x)]
