@@ -54,6 +54,14 @@ class Document(object):
         # pymongo.find as_class applies recursively to documents embedded in result
         self.a[key] = _strip_class(value)
 
+    def __getitem__(self, key):
+        if self.a:
+            return self.a[key]
+
+    def __iter__(self):
+        if self.a:
+            return iter(self.a)
+
     def __new__(klass, *a, **kw):
         indexes = getattr(klass, '__collection_indexes__', None)
         if indexes:
