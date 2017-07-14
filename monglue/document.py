@@ -1,3 +1,5 @@
+from bson.codec_options import CodecOptions
+
 """
 Exceptions
 """
@@ -72,13 +74,17 @@ class Document(object):
 
     @classmethod
     def find(klass, spec=None):
-        return klass.__database__[klass.__collection_name__].find(
-            spec, as_class=klass)
+        return klass\
+            .__database__[klass.__collection_name__]\
+            .with_options(codec_options=CodecOptions(document_class=klass))\
+            .find(spec)
 
     @classmethod
     def find_one(klass, spec=None):
-        return klass.__database__[klass.__collection_name__].find_one(
-            spec, as_class=klass)
+        return klass\
+            .__database__[klass.__collection_name__]\
+            .with_options(codec_options=CodecOptions(document_class=klass))\
+            .find_one(spec)
 
     def set(self, document):
         self.a.update(document)
