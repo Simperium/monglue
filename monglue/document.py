@@ -1,4 +1,5 @@
 from bson.codec_options import CodecOptions
+from collections import MutableMapping
 
 """
 Exceptions
@@ -42,7 +43,7 @@ def _strip_class(value):
             value[i] = _strip_class(value[i])
     return value
 
-class Document(object):
+class Document(MutableMapping):
     @classmethod
     def new(klass, document=None):
         if not document:
@@ -56,12 +57,24 @@ class Document(object):
         # pymongo.find as_class applies recursively to documents embedded in result
         self.a[key] = _strip_class(value)
 
+    def __getitem__(self, key):
+        return self.a[key]
+
+    def __delitem__(self, key):
+        del self.a[key]
+
+    def __iter__(self):
+        return iter(self.a)
+
+    def __len__(self):
+        return len(self.a)
+
     def __new__(klass, *a, **kw):
         indexes = getattr(klass, '__collection_indexes__', None)
         if indexes:
             for key, options in indexes:
                 klass.ensure_index(key, **options)
-        return object.__new__(klass)
+        return MutableMapping.__new__(klass)
 
     def __init__(self, document=None):
         self.a = document or {}
